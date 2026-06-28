@@ -1,0 +1,10 @@
+{
+  "name": "IL2CPP Web Dumper",
+  "short_name": "IL2CPP Dumper",
+  "description": "Client-side IL2CPP dump.cs generator for game modding workflows.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": []
+}
