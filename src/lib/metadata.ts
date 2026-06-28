@@ -228,7 +228,8 @@ export class Metadata {
 
   readString(idx: number): string {
     if (idx < 0) return "";
-    if (this.stringCache.has(idx)) return this.stringCache.get(idx)!;
+    const cached = this.stringCache.get(idx);
+    if (cached !== undefined) return cached;
     const off = this.header.stringOffset + idx;
     if (off < 0 || off >= this.reader.length) return "";
     const s = this.reader.readCString(off);

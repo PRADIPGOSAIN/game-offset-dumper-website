@@ -163,25 +163,23 @@ export async function generateDump(
   addrCache.clear(); // Clear cache on new run to prevent memory growth
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const chunks: string[] = [];
-  let buffer: string[] = [];
+  let currentChunk = "";
   let preview = "";
   const lines = {
-    push: (...items: string[]) => {
-      for (const item of items) {
-        const line = item + "\n";
-        if (preview.length < 12000) preview += line.slice(0, 12000 - preview.length);
-        buffer.push(line);
-      }
-      if (buffer.length > 2000) {
-        chunks.push(buffer.join(""));
-        buffer = [];
+    push: (item: string) => {
+      const line = item + "\n";
+      if (preview.length < 12000) preview += line.slice(0, 12000 - preview.length);
+      currentChunk += line;
+      if (currentChunk.length > 200000) { // ~200KB chunks
+        chunks.push(currentChunk);
+        currentChunk = "";
       }
     },
   };
   const flush = () => {
-    if (buffer.length) {
-      chunks.push(buffer.join(""));
-      buffer = [];
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = "";
     }
   };
   const totalTypes = metadata.types.length;
@@ -407,7 +405,7 @@ export async function generateDump(
     lines.push(`}`);
     pushBlank();
 
-    if (idx % 50 === 0) {
+    if (idx % 2000 === 0) {
       if (onProgress) {
         onProgress(`Processed ${idx}/${order.length} types`, (idx / order.length) * 100);
       }
