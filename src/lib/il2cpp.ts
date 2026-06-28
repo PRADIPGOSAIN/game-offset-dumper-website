@@ -6,7 +6,7 @@ import { Metadata } from "./metadata";
 export class Il2CppBinary {
   elf: ElfFile;
   metadata: Metadata;
-  methodPointers: bigint[] = [];
+  methodPointers: BigInt64Array = new BigInt64Array(0);
   codeRegistrationVA: bigint = 0n;
   metadataRegistrationVA: bigint = 0n;
   resolved: boolean = false;
@@ -481,7 +481,7 @@ export class Il2CppBinary {
         allPointers.push(readPtr(mpOff + j * ptrSize));
       }
     }
-    this.methodPointers = allPointers;
+    this.methodPointers = new BigInt64Array(allPointers);
     this.notes.push(`Loaded ${allPointers.length} method pointers from codeGenModules`);
   }
 
@@ -489,9 +489,11 @@ export class Il2CppBinary {
     const r = this.elf.reader;
     const ptrSize = this.elf.is64 ? 8 : 4;
     const readPtr = (p: number) => (this.elf.is64 ? r.readU64(p) : BigInt(r.readU32(p)));
+    const allPointers: bigint[] = [];
     for (let i = 0; i < count; i++) {
-      this.methodPointers.push(readPtr(off + i * ptrSize));
+      allPointers.push(readPtr(off + i * ptrSize));
     }
+    this.methodPointers = new BigInt64Array(allPointers);
     this.notes.push(`Loaded ${count} method pointers (legacy layout)`);
   }
 
