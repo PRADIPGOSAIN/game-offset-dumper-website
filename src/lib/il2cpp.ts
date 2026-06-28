@@ -11,14 +11,12 @@ export class Il2CppBinary {
   metadataRegistrationVA: bigint = 0n;
   resolved: boolean = false;
   notes: string[] = [];
+  private sortedValues: BigInt64Array = new BigInt64Array(0);
+  private sortedAddrs: BigInt64Array = new BigInt64Array(0);
 
   // Cached segment lists (mirrors Perfare's exec/data/bss separation)
   private execSegs: { offset: number; offsetEnd: number; address: bigint; addressEnd: bigint }[] = [];
   private dataSegs: { offset: number; offsetEnd: number; address: bigint; addressEnd: bigint }[] = [];
-
-  // Pre-indexed pointer map for O(1) FindReference lookups
-  private pointerMap = new Map<bigint, bigint[]>();
-  private pointerMapBuilt = false;
 
   constructor(elf: ElfFile, metadata: Metadata) {
     this.elf = elf;
@@ -86,7 +84,7 @@ export class Il2CppBinary {
     // --- PlusSearch (mirrors Elf64.PlusSearch) ---
     this.notes.push("Symbols not found. Running PlusSearch heuristics (Perfare port)...");
     try {
-      this.buildPointerMap();
+      this.buildBinarySearchMap();
       const codeReg = this.findCodeRegistration();
       const metaReg = this.findMetadataRegistration();
 
@@ -102,9 +100,9 @@ export class Il2CppBinary {
         this.metadataRegistrationVA = metaReg;
         this.notes.push(`PlusSearch: MetadataRegistration at 0x${metaReg.toString(16)}`);
       }
-    } finally {
-      this.pointerMap.clear();
-      this.pointerMapBuilt = false;
+    } catch { /* ignored */ } finally {
+      this.sortedValues = new BigInt64Array(0);
+      this.sortedAddrs = new BigInt64Array(0);
     }
 
     if (!this.resolved) {
@@ -355,44 +353,69 @@ export class Il2CppBinary {
     return codeReg;
   }
 
-  // ---------------------------------------------------------------------------
-  // FindReference — mirrors SectionHelper.FindReference
-  // Uses pre-indexed pointer map for O(1) lookup.
-  // ---------------------------------------------------------------------------
-  private buildPointerMap() {
-    if (this.pointerMapBuilt) return;
-    this.pointerMapBuilt = true;
-
+  private buildBinarySearchMap() {
     const r = this.elf.reader;
+    const view = (r as any).view as DataView;
     const ptrSize = this.elf.is64 ? 8 : 4;
-    const readPtr = (p: number) => (this.elf.is64 ? r.readU64(p) : BigInt(r.readU32(p)));
 
-    // Build VA bounds for fast validation
-    let minVA = 0xFFFFFFFFFFFFFFFFn;
-    let maxVA = 0n;
-    for (const seg of this.elf.segments) {
-      if (seg.type === 1) {
-        if (seg.vaddr < minVA) minVA = seg.vaddr;
-        if (seg.vaddr + seg.memsz > maxVA) maxVA = seg.vaddr + seg.memsz;
-      }
-    }
-
-    // Only index data segments (mirrors Perfare FindReference which only reads data)
+    const values: bigint[] = [];
+    const addrs: bigint[] = [];
     for (const sec of this.dataSegs) {
       const end = Math.min(sec.offsetEnd, r.length) - ptrSize;
       for (let pos = sec.offset; pos <= end; pos += ptrSize) {
-        const val = readPtr(pos);
-        if (val < minVA || val >= maxVA) continue;
-        const refVA = sec.address + BigInt(pos - sec.offset);
-        let list = this.pointerMap.get(val);
-        if (!list) { list = []; this.pointerMap.set(val, list); }
-        list.push(refVA);
+        const val = this.elf.is64
+          ? view.getBigUint64(pos, true)
+          : BigInt(view.getUint32(pos, true));
+        values.push(val);
+        addrs.push(sec.address + BigInt(pos - sec.offset));
       }
+    }
+
+    const indices = new Int32Array(values.length);
+    for (let i = 0; i < indices.length; i++) indices[i] = i;
+    indices.sort((a, b) => {
+      const diff = values[a] - values[b];
+      return diff < 0n ? -1 : diff > 0n ? 1 : 0;
+    });
+
+    this.sortedValues = new BigInt64Array(values.length);
+    this.sortedAddrs = new BigInt64Array(values.length);
+    for (let i = 0; i < indices.length; i++) {
+      this.sortedValues[i] = values[indices[i]];
+      this.sortedAddrs[i] = addrs[indices[i]];
     }
   }
 
   private findReference(addr: bigint): bigint[] {
-    return this.pointerMap.get(addr) ?? [];
+    const refs: bigint[] = [];
+    let low = 0;
+    let high = this.sortedValues.length - 1;
+    let matchIdx = -1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      const val = this.sortedValues[mid];
+      if (val === addr) {
+        matchIdx = mid;
+        break;
+      } else if (val < addr) {
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    if (matchIdx !== -1) {
+      let idx = matchIdx;
+      while (idx >= 0 && this.sortedValues[idx] === addr) {
+        refs.push(this.sortedAddrs[idx]);
+        idx--;
+      }
+      idx = matchIdx + 1;
+      while (idx < this.sortedValues.length && this.sortedValues[idx] === addr) {
+        refs.push(this.sortedAddrs[idx]);
+        idx++;
+      }
+    }
+    return refs;
   }
 
   // ---------------------------------------------------------------------------

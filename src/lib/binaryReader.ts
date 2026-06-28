@@ -3,6 +3,7 @@ export class BinaryReader {
   private view: DataView;
   public pos: number = 0;
   public buf: Uint8Array;
+  private decoder = new TextDecoder("utf-8", { fatal: false });
 
   constructor(buf: ArrayBuffer | Uint8Array) {
     if (buf instanceof Uint8Array) {
@@ -75,7 +76,7 @@ export class BinaryReader {
   readCString(p: number): string {
     let end = p;
     while (end < this.buf.length && this.buf[end] !== 0) end++;
-    return new TextDecoder("utf-8", { fatal: false }).decode(this.buf.subarray(p, end));
+    return this.decoder.decode(this.buf.subarray(p, end));
   }
 
   readBytes(n: number, p?: number): Uint8Array {

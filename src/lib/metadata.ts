@@ -237,6 +237,13 @@ export class Metadata {
     return s;
   }
 
+  readStringNoCache(idx: number): string {
+    if (idx < 0) return "";
+    const off = this.header.stringOffset + idx;
+    if (off < 0 || off >= this.reader.length) return "";
+    return this.reader.readCString(off);
+  }
+
   // Type definition sizing varies. We provide a best-effort layout supporting 24-29.
   private getTypeDefSize(): number {
     // v24.0: 92 bytes? Actually:

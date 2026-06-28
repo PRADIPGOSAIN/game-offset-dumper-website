@@ -314,7 +314,7 @@ export async function generateDump(
       for (let f = t.fieldStart; f < t.fieldStart + t.fieldCount; f++) {
         if (f >= metadata.fields.length) break;
         const fd = metadata.fields[f];
-        const fname = metadata.readString(fd.nameIndex);
+        const fname = metadata.readStringNoCache(fd.nameIndex);
         const tok = opts.includeTokens ? ` // 0x${fd.token.toString(16)}` : "";
         lines.push(`${TAB}${fieldAccess(0)} object ${fname};${tok}`);
         emittedFields++;
@@ -339,8 +339,8 @@ export async function generateDump(
         });
       } else if (opts.sortMode === "alphabetical") {
         methodOrder.sort((a, b) => {
-          const fnA = metadata.readString(metadata.methods[a].nameIndex);
-          const fnB = metadata.readString(metadata.methods[b].nameIndex);
+          const fnA = metadata.readStringNoCache(metadata.methods[a].nameIndex);
+          const fnB = metadata.readStringNoCache(metadata.methods[b].nameIndex);
           return fnA < fnB ? -1 : fnA > fnB ? 1 : 0;
         });
       }
@@ -348,7 +348,7 @@ export async function generateDump(
       for (const m of methodOrder) {
         if (m >= metadata.methods.length) break;
         const md = metadata.methods[m];
-        const mname = metadata.readString(md.nameIndex);
+        const mname = metadata.readStringNoCache(md.nameIndex);
         const access = methodAccess(md.flags);
         if (methodRegex && !methodRegex.test(mname)) continue;
 
@@ -366,7 +366,7 @@ export async function generateDump(
           for (let p = md.parameterStart; p < md.parameterStart + md.parameterCount; p++) {
             if (p < 0 || p >= metadata.parameters.length) break;
             const pd = metadata.parameters[p];
-            params.push("object " + metadata.readString(pd.nameIndex));
+            params.push("object " + metadata.readStringNoCache(pd.nameIndex));
           }
           paramsStr = params.join(", ");
         }
@@ -405,7 +405,7 @@ export async function generateDump(
     lines.push(`}`);
     pushBlank();
 
-    if (idx % 2000 === 0) {
+    if (idx % 500 === 0) {
       if (onProgress) {
         onProgress(`Processed ${idx}/${order.length} types`, (idx / order.length) * 100);
       }
@@ -444,7 +444,7 @@ export function generateScript(
       if (opts.onlyResolved !== false && rva === 0n) continue;
       const off = binary.elf.vaToOffset(rva);
       entries.push({
-        name: `${typeName}::${metadata.readString(md.nameIndex)}`,
+        name: `${typeName}::${metadata.readStringNoCache(md.nameIndex)}`,
         rva: `0x${rva.toString(16).toUpperCase()}`,
         offset: off > 0 ? `0x${off.toString(16).toUpperCase()}` : "-1",
         methodIndex: m,
@@ -495,7 +495,7 @@ export function generateFridaScript(
     for (let m = t.methodStart; m < t.methodStart + t.methodCount && count < maxHooks; m++) {
       if (m < 0 || m >= metadata.methods.length) break;
       const md = metadata.methods[m];
-      const methodName = metadata.readString(md.nameIndex);
+      const methodName = metadata.readStringNoCache(md.nameIndex);
       if (methodRe && !methodRe.test(methodName)) continue;
       const rva = binary.getMethodRva(m);
       if (rva === 0n) continue;
@@ -536,7 +536,7 @@ export function generateIdaScript(
       const md = metadata.methods[m];
       const rva = binary.getMethodRva(m);
       if (rva === 0n) continue;
-      const fq = `${tn}_${metadata.readString(md.nameIndex)}_${m}`;
+      const fq = `${tn}_${metadata.readStringNoCache(md.nameIndex)}_${m}`;
       lines.push(`set_name(base + 0x${rva.toString(16).toUpperCase()}, ${JSON.stringify(fq)})`);
       count++;
     }
@@ -558,7 +558,7 @@ export function generateCsv(metadata: Metadata, binary: Il2CppBinary): string {
       const md = metadata.methods[m];
       const rva = binary.getMethodRva(m);
       const off = rva !== 0n ? binary.elf.vaToOffset(rva) : -1;
-      const mn = metadata.readString(md.nameIndex).replace(/,/g, "_");
+      const mn = metadata.readStringNoCache(md.nameIndex).replace(/,/g, "_");
       rows.push(
         `${ti},${ns},${tn.replace(/,/g, "_")},${m},${mn},` +
         `0x${rva.toString(16).toUpperCase()},${off > 0 ? "0x" + off.toString(16).toUpperCase() : "-1"},` +
