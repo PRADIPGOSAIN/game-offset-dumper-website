@@ -118,8 +118,13 @@ export const DEFAULT_OPTIONS: DumpOptions = {
   sortMode: "metadata-order",
 };
 
+const addrCache = new Map<bigint, string>();
 function formatAddr(addr: bigint): string {
-  return `0x${addr.toString(16).toUpperCase()}`;
+  const cached = addrCache.get(addr);
+  if (cached !== undefined) return cached;
+  const s = `0x${addr.toString(16).toUpperCase()}`;
+  addrCache.set(addr, s);
+  return s;
 }
 
 function buildRegex(pat: string): RegExp | null {
@@ -155,6 +160,7 @@ export async function generateDump(
   options: DumpOptions = DEFAULT_OPTIONS,
   onProgress?: DumpProgress
 ): Promise<DumpResult> {
+  addrCache.clear(); // Clear cache on new run to prevent memory growth
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const chunks: string[] = [];
   let buffer: string[] = [];
@@ -401,7 +407,7 @@ export async function generateDump(
     lines.push(`}`);
     pushBlank();
 
-    if (idx % 200 === 0) {
+    if (idx % 50 === 0) {
       if (onProgress) {
         onProgress(`Processed ${idx}/${order.length} types`, (idx / order.length) * 100);
       }

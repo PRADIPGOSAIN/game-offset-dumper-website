@@ -48,6 +48,7 @@ export class ElfFile {
   shstrndx: number = 0;
   sections: ElfSection[] = [];
   segments: ElfSegment[] = [];
+  private loadSegments: ElfSegment[] = [];
   symbols: ElfSymbol[] = [];
   dynSymbols: ElfSymbol[] = [];
 
@@ -122,6 +123,7 @@ export class ElfFile {
         this.segments.push({ type, flags, offset, vaddr, paddr, filesz, memsz, align });
       }
     }
+    this.loadSegments = this.segments.filter((s) => s.type === 1);
   }
 
   private parseSections() {
@@ -227,8 +229,7 @@ export class ElfFile {
 
   // Convert virtual address (RVA) to file offset
   vaToOffset(va: bigint): number {
-    for (const seg of this.segments) {
-      if (seg.type !== 1) continue; // PT_LOAD
+    for (const seg of this.loadSegments) {
       if (va >= seg.vaddr && va < seg.vaddr + seg.memsz) {
         return Number(va - seg.vaddr + seg.offset);
       }
